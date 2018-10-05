@@ -3,7 +3,8 @@
 // Don't access this file directly to do stuff.
 defined( 'ABSPATH' ) or exit;
 
-$zapier_settings = get_option( 'wpzp_zapier_settings', true );
+//todo - Don't change that due to backend compatibility - or create a fallback logic
+$zapier_settings = get_option( 'wp_zapier_settings', true );
 
 $api_key = ! empty( $_REQUEST['api_key'] ) ? sanitize_key( $_REQUEST['api_key'] ) : '';
 $action = ! empty( $_REQUEST['action'] ) ? sanitize_text_field( $_REQUEST['action'] ) : '';
@@ -41,11 +42,12 @@ switch ( $action ) {
 function wpzp_create_user(){
 
 	// Get the params
-	$username = isset( $_GET['username'] ) ? sanitize_text_field( $_GET['username'] ) : '';
-	$email = isset( $_GET['email'] ) ? sanitize_email( $_GET['email'] ) : '';
-	$first_name = isset( $_GET['first_name'] ) ? sanitize_text_field( $_GET['first_name'] ) : '';
-	$last_name = isset( $_GET['last_name'] ) ? sanitize_text_field( $_GET['last_name'] ) : '';
-	$role = isset( $_GET['role'] ) ? sanitize_text_field( $_GET['role'] ) : 'subscriber';
+	$username = isset( $_REQUEST['username'] ) ? sanitize_text_field( $_REQUEST['username'] ) : '';
+	$display_name = isset( $_REQUEST['display_name'] ) ? sanitize_text_field( $_REQUEST['display_name'] ) : '';
+	$email = isset( $_REQUEST['email'] ) ? sanitize_email( $_REQUEST['email'] ) : '';
+	$first_name = isset( $_REQUEST['first_name'] ) ? sanitize_text_field( $_REQUEST['first_name'] ) : '';
+	$last_name = isset( $_REQUEST['last_name'] ) ? sanitize_text_field( $_REQUEST['last_name'] ) : '';
+	$role = isset( $_REQUEST['role'] ) ? sanitize_text_field( $_REQUEST['role'] ) : 'subscriber';
 	$user_pass = wp_generate_password( 20, true, false );
 
 	if ( empty( $email ) ) {
@@ -53,12 +55,14 @@ function wpzp_create_user(){
 		exit;
 	}
 
-	if ( empty( $username ) ) {
-		$username = wpzp_generate_username( $firstname, $lastname, $email );
+	$dynamic_username = apply_filters( 'wp_zapier_create_dynamic_username', false );
+	if ( empty( $username ) && $dynamic_username ) {
+		$username = wpzp_generate_username( $first_name, $last_name, $email );
 	}
 
 	$userdata = array(
 		'user_login' => $username,
+		'display_name' => $display_name,
 		'user_email' => $email,
 		'first_name' => $first_name,
 		'last_name' => $last_name,
@@ -86,7 +90,7 @@ function wpzp_create_user(){
  */
 function wpzp_update_user() {
 
-	$email = isset( $_GET['email'] ) ? sanitize_email( $_GET['email'] ) : '';
+	$email = isset( $_REQUEST['email'] ) ? sanitize_email( $_REQUEST['email'] ) : '';
 
 	if ( ! empty( $email ) ) {
 		$user = get_user_by( 'email', $email );
@@ -94,12 +98,14 @@ function wpzp_update_user() {
 		$create_user = apply_filters( 'wp_zapier_create_user_on_update_webhook', true );
 
 		// If the user doesn't exist create the user.
-		if ( empty( $user ) && $create_user ) {
-			wpzp_create_user();
-			exit;
-		}else{
-			echo json_encode( __( 'User does not exist.', 'wp-zapier' ) );
-			exit;
+		if ( empty( $user ) ) {
+			if($create_user){
+				wpzp_create_user();
+				exit;
+			} else {
+				echo json_encode( __( 'User does not exist.', 'wp-zapier' ) );
+				exit;
+			}
 		}
 
 		// Let's not allow calls to update administrators.
@@ -110,15 +116,17 @@ function wpzp_update_user() {
 
 		// Get all updated information
 		$user_id = $user->ID;
-		$new_email = isset( $_GET['new_email'] ) ? sanitize_email( $_GET['new_email'] ) : $user->user_email;
-		$role = isset( $_GET['role'] ) ? sanitize_text_field( $_GET['role'] ) : '';
-		$first_name = isset( $_GET['first_name'] ) ? sanitize_textarea_field( $_GET['first_name'] ) : $user->first_name;
-		$last_name = isset( $_GET['last_name'] ) ? sanitize_textarea_field( $_GET['last_name'] ) : $user->last_name;
-		$description = isset( $_GET['description'] ) ? sanitize_textarea_field( $_GET['description'] ) : $user->description;
+		$display_name = isset( $_REQUEST['display_name'] ) ? sanitize_text_field( $_REQUEST['display_name'] ) : '';
+		$new_email = isset( $_REQUEST['new_email'] ) ? sanitize_email( $_REQUEST['new_email'] ) : $user->user_email;
+		$role = isset( $_REQUEST['role'] ) ? sanitize_text_field( $_REQUEST['role'] ) : '';
+		$first_name = isset( $_REQUEST['first_name'] ) ? sanitize_textarea_field( $_REQUEST['first_name'] ) : $user->first_name;
+		$last_name = isset( $_REQUEST['last_name'] ) ? sanitize_textarea_field( $_REQUEST['last_name'] ) : $user->last_name;
+		$description = isset( $_REQUEST['description'] ) ? sanitize_textarea_field( $_REQUEST['description'] ) : $user->description;
 
 
 		$userdata = array(
 			'ID' => $user_id,
+			'display_name' => $display_name,
 			'user_email' => $new_email,
 			'first_name' => $first_name,
 			'last_name' => $last_name,
@@ -161,7 +169,7 @@ function wpzp_update_user() {
  */
 function wpzp_delete_user() {
 
-	$email = isset( $_GET['email'] ) ? sanitize_email( $_GET['email'] ) : '';
+	$email = isset( $_REQUEST['email'] ) ? sanitize_email( $_REQUEST['email'] ) : '';
 
 	if ( ! empty( $email ) ) {
 		$user = get_user_by( 'email', $email );
@@ -200,7 +208,7 @@ function wpzp_update_user_meta( $user_id ) {
 		return;
 	}
 
-	$fields_array = isset( $_GET['usermeta'] ) ? explode( ';', $_GET['usermeta'] ) : '';
+	$fields_array = isset( $_REQUEST['usermeta'] ) ? explode( ';', $_REQUEST['usermeta'] ) : '';
 
 	if ( ! empty( $fields_array ) && is_array( $fields_array ) ) {
 		
